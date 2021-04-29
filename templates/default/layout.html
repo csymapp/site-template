@@ -309,52 +309,6 @@
   <script src="{{config.base_url}}/scripts/raneto.js"></script>
   <script src="{{config.base_url}}/scripts/uf.js"></script>
 
-  <script>
-    $(document).ready(function () {
-        $('.fb-share-c').attr('href',
-        `https://www.facebook.com/sharer/sharer.php?u=${encodeURI(window.location.href)}`)
-      let auth = $('#authC').html()
-      try {
-        auth = JSON.parse(auth);
-        if (auth.accessToken) {
-          localStorage.setItem("token", auth.accessToken)
-          if (!localStorage.getItem("returnafterlogin"))
-            localStorage.setItem("returnafterlogin", '/');
-        }
-      } catch (err) {
-        console.error(err)
-      }
-      if (localStorage.getItem("token")) {
-        $("#headerLinks").prepend('<li><a class="logoutgtn" href="/logout">Log out</a></li>')
-        $("#mobile-nav").prepend('<a class="logoutgtn" href="/logout">Log out</a>')
-        $(document).on("click", "a.logoutgtn", function (e) {
-          e.preventDefault()
-          let returnTo = window.location.href
-          if (!returnTo) returnTo = '/'
-          localStorage.setItem("returnafterlogin", window.location.href);
-          localStorage.removeItem("token");
-          window.location = `${$(this).attr('href')}?redirectUrl=${window.location.href}`;
-        });
-        let returnTo = localStorage.getItem("returnafterlogin")
-        if (returnTo) {
-          localStorage.removeItem("returnafterlogin");
-          window.location = returnTo
-        }
-      }
-      if (!localStorage.getItem("token")) {
-        $("#headerLinks").prepend('<li><a class="loginbtn" href="/login">Log in</a></li>')
-        $("#mobile-nav").prepend('<a class="loginbtn" href="/login">Log in</a>')
-        $(document).on("click", "a.loginbtn", function (e) {
-          e.preventDefault()
-          localStorage.setItem("returnafterlogin", window.location.href);
-          window.location = $(this).attr('href');
-
-        });
-      }
-    })
-
-  </script>
-
   <!-- Popper.JS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.0/umd/popper.min.js"
     integrity="sha384-cs/chFZiN24E4KMATLdqdvsezGxaGsi4hLGOzlXwp5UZB1LY//20VyM2taTB4QvJ" crossorigin="anonymous">
