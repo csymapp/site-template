@@ -21,7 +21,7 @@
   <link rel="shortcut icon" href="{{config.base_url}}/favicon.ico">
   <link rel="stylesheet" href="{{config.base_url}}/styles/uf_style.css">
   <link rel="stylesheet" href="{{config.base_url}}/styles/cstyle.css">
-  <!-- <link rel="stylesheet" href="{{config.base_url}}/styles/theme.css"> -->
+  <link rel="stylesheet" href="{{config.base_url}}/styles/theme.css">
   {{#config.rtl_layout}}
   <link rel="stylesheet" href="{{config.base_url}}/lib/bootstrap-rtl/dist/css/bootstrap-rtl.min.css">
   <link rel="stylesheet" href="{{config.base_url}}/styles/raneto.rtl.css">
@@ -36,9 +36,7 @@
   <div id="fb-root"></div>
   <script async defer crossorigin="anonymous"
     src="https://connect.facebook.net/en_GB/sdk.js#xfbml=1&version=v6.0&appId=156811091033253&autoLogAppEvents=1">
-  </script>
-
-
+    </script>
   <div class="wrapper">
     <div class="navbar-fixed" id="nav-main">
       <nav class="custom">
@@ -50,36 +48,36 @@
             {{#config.externalLinks}}
             <li>{{{.}}}</li>
             {{/config.externalLinks}}
-            {{#config.telegram}}
+            {{#config.social.telegram}}
             <span id="nav-social">
-              <li class="fa-stack"><a href="{{config.telegram}}" target="_blank"><i
+              <li class="fa-stack"><a href="{{config.social.telegram}}" target="_blank"><i
                     class="fa fa-circle fa-stack-2x"></i><i class="fa fa-telegram fa-stack-1x"></i></a></li>
             </span>
-            {{/config.telegram}}
-            {{#config.whatsapp}}
+            {{/config.social.telegram}}
+            {{#config.social.whatsapp}}
             <span id="nav-social">
-              <li class="fa-stack"><a href="{{config.whatsapp}}" target="_blank"><i
+              <li class="fa-stack"><a href="{{config.social.whatsapp}}" target="_blank"><i
                     class="fa fa-circle fa-stack-2x"></i><i class="fa fa-whatsapp fa-stack-1x"></i></a></li>
             </span>
-            {{/config.whatsapp}}
-            {{#config.facebook}}
+            {{/config.social.whatsapp}}
+            {{#config.social.facebook}}
             <span id="nav-social">
-              <li class="fa-stack"><a href="{{config.facebook}}" target="_blank"><i
+              <li class="fa-stack"><a href="{{config.social.facebook}}" target="_blank"><i
                     class="fa fa-circle fa-stack-2x"></i><i class="fa fa-facebook fa-stack-1x"></i></a></li>
             </span>
-            {{/config.facebook}}
-            {{#config.youtube}}
+            {{/config.social.facebook}}
+            {{#config.social.youtube}}
             <span id="nav-social">
-              <li class="fa-stack"><a href="{{config.youtube}}" target="_blank"><i
+              <li class="fa-stack"><a href="{{config.social.youtube}}" target="_blank"><i
                     class="fa fa-circle fa-stack-2x"></i><i class="fa fa-youtube fa-stack-1x"></i></a></li>
             </span>
-            {{/config.youtube}}
-            {{#config.github}}
+            {{/config.social.youtube}}
+            {{#config.social.github}}
             <span id="nav-social">
-              <li class="fa-stack"><a href="{{config.github}}" target="_blank"><i
+              <li class="fa-stack"><a href="{{config.social.github}}" target="_blank"><i
                     class="fa fa-circle fa-stack-2x"></i><i class="fa fa-github fa-stack-1x"></i></a></li>
             </span>
-            {{/config.github}}
+            {{/config.social.github}}
           </ul>
         </div>
       </nav>
@@ -98,16 +96,16 @@
             <span data-search-clear><i class="fa fa-close"></i></span>
           </form>
           <div id="mobile-nav">
-            {{#config.facebook}}
-            <a href="{{config.facebook}}">Facebok</a>
-            {{/config.facebook}}
+            {{#config.social.facebook}}
+            <a href="{{config.social.facebook}}" target="_blank">Facebook</a>
+            {{/config.social.facebook}}
 
-            {{#config.github}}
-            <a href="{{config.facebook}}">Github</a>
-            {{/config.github}}
-            {{#config.github}}
-            <a href="{{config.facebook}}">Youtube</a>
-            {{/config.github}}
+            {{#config.social.github}}
+            <a href="{{config.social.github}}" target="_blank">Github</a>
+            {{/config.social.github}}
+            {{#config.social.youtube}}
+            <a href="{{config.social.youtube}}" target="_blank">Youtube</a>
+            {{/config.social.youtube}}
           </div>
 
         </div>
@@ -186,8 +184,9 @@
             <p>Built with <a href="http://csycms.csymapp.com">csyms</a> - A Flat File CMS for node</p>
             <p>
               {{#config.copyright}}
-              <p>Copyright &copy; {{{config.copyright.startYear}}} -  {{{config.thisYear}}} <a href="{{{config.copyright.url}}}">{{{config.copyright.name}}}</a> </p>
-              {{/config.copyright}}
+            <p>Copyright &copy; {{{config.copyright.startYear}}} - {{{config.thisYear}}} <a
+                href="{{{config.copyright.url}}}">{{{config.copyright.name}}}</a> </p>
+            {{/config.copyright}}
             </p>
           </section>
         </div>
@@ -223,7 +222,7 @@
             <br>
             {{/breadCrumbs}}
             <a class="fb-share-c" target="_blank"
-              href="https://www.facebook.com/sharer/sharer.php?u=http%3A%2F%2Fsabbathschool.gospelsounders.org%2FSabbath-School&amp;src=sdkpreparse"
+              href="https://www.facebook.com/sharer/sharer.php?u={{{config.url}}}&amp;src=sdkpreparse"
               style="text-decoration: none; float:right;">
               <i class="a-icon fa fa-share"></i>Share
             </a>
@@ -312,7 +311,7 @@
   <!-- Popper.JS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.0/umd/popper.min.js"
     integrity="sha384-cs/chFZiN24E4KMATLdqdvsezGxaGsi4hLGOzlXwp5UZB1LY//20VyM2taTB4QvJ" crossorigin="anonymous">
-  </script>
+    </script>
 
   <script type="text/javascript">
     $(document).ready(function () {
