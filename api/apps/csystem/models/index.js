@@ -48,7 +48,7 @@ function models(globalConfig) {
 		.readdirSync(__dirname + '/../../')
 		.forEach((file) => {
 			let appFolder = path.join(__dirname + '/../../', file, 'models')
-			console.log(appFolder)
+			// console.log(appFolder)
 			try {
 				fse
 					.readdirSync(appFolder)
@@ -96,28 +96,19 @@ function models(globalConfig) {
 				})
 		})
 
-
 	Object.keys(db.models).forEach(function (modelName) {
-		// console.log('ppppppppppppppppppp')
-		// console.log('ppppppppppppppppppp')
-		// console.log('ppppppppppppppppppp')
-		// console.log('ppppppppppppppppppp')
-		console.log('checkcheck', modelName, db.models[modelName].associate)
+		// console.log('checkcheck', modelName, db.models[modelName].associate)
 		if ('associate' in db.models[modelName]) {
-			console.log(`associate ${modelName}`)
+			// console.log(`associate ${modelName}`)
 			try {
-				console.log(db.models[modelName].associate)
+				// console.log(db.models[modelName].associate)
 				db.models[modelName].associate(db.models)
 			} catch (err) {
 				console.log(err)
 			}
 		}
 	})
-
-	// console.log(db)
-	
 	return db
-
 }
 
 // console.log(models)

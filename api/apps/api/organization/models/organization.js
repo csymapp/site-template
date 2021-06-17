@@ -15,6 +15,9 @@ module.exports = (sequelize, DataTypes) => {
 					msg: 'Please give us a correct organization name with atleast two characters'
 				}
 			}
+		}, organizationNameLowerCase: {
+			type: DataTypes.STRING,
+			allowNull: false
 		},
 	},
 		{
@@ -23,13 +26,22 @@ module.exports = (sequelize, DataTypes) => {
 
 		})
 
-
 	organization.associate = function (models) {
 		organization.belongsTo(models.users, {
-	    	onDelete: "CASCADE",
-	    	onUpdate: "CASCADE",
+			onDelete: "CASCADE",
+			onUpdate: "CASCADE",
 			allowNull: false
-	    });
+		});
+		organization.hasMany(models.organizationUser, {
+			onDelete: "CASCADE",
+			onUpdate: "CASCADE",
+			allowNull: false
+		});
+		organization.hasMany(models.facilities, {
+			onDelete: "CASCADE",
+			onUpdate: "CASCADE",
+			allowNull: false
+		});
 	}
 	return organization;
 }

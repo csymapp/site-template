@@ -123,7 +123,28 @@ module.exports = (sequelize, DataTypes) => {
 			}
 		});
 		// console.log(models)
-		user.hasOne(models.organizations, {
+		user.hasMany(models.organizations, {
+			onDelete: "CASCADE",
+			onUpdate: "CASCADE",
+			foreignKey: {
+				allowNull: false
+			}
+		});
+		user.hasMany(models.organizationUser, {
+			onDelete: "CASCADE",
+			onUpdate: "CASCADE",
+			foreignKey: {
+				allowNull: false
+			}
+		});
+		user.hasMany(models.facilityUser, {
+			onDelete: "CASCADE",
+			onUpdate: "CASCADE",
+			foreignKey: {
+				allowNull: false
+			}
+		});
+		user.hasMany(models.logins, {
 			onDelete: "CASCADE",
 			onUpdate: "CASCADE",
 			foreignKey: {

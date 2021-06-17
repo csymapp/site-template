@@ -1,12 +1,12 @@
 {
-  "name": "csycmsapi",
+  "name": "cysmedapi",
   "version": "1.0.0",
-  "description": "csycms api",
+  "description": "cysmed api",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Brian Onang'o",
+  "author": "cysmed",
   "license": "Apache-2.0",
   "dependencies": {
     "async": "^3.2.0",

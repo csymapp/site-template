@@ -1,22 +1,37 @@
 'use strict'
 
-const { resolve, reject } = require('bluebird');
-const { hash } = require('bcrypt');
-
+// const { resolve, reject, filter } = require('bluebird');
+// const { hash } = require('bcrypt');
+const jwt_decode = require("jwt-decode").default;
 const to = require('await-to-js').to
 const csystem = require(__dirname + "/../../csystem").csystem;
+const { Op } = require("sequelize");
 // const etc = require('node-etc')
 // const path = require('path');
 // const bcrypt = require('bcrypt');
 // const saltRounds = 10;
 
-let sequelize;
+// let sequelize;
+const helpers_ = require('../helpers').helpers
+let helpers;
 
 
 class auth extends csystem {
 
 	constructor(config) {
 		super(config);
+		helpers = new helpers_(this)
+	}
+
+	logout_ = async (req, res, next) => {
+		return new Promise(async (resolve, reject) => {
+			let token = (req.headers.Authorization || req.headers.authorization || req.headers["X-Authorization"] || req.headers["x-authorization"] || req.query["x-authorization"] || '').split(" ").slice(-1)[0]
+			let [err, care] = await to(this.sequelize.models.logins.findOne({ where: { token } }))
+			if (care) {
+				care.update({ token: '' })
+			}
+			resolve()
+		})
 	}
 
 	login_ = async (req, res, next) => { // for some unknown reason login fails
@@ -24,6 +39,7 @@ class auth extends csystem {
 			let body = req.body;
 			//comparePassword
 			let { email, password } = body
+			email = email.toLowerCase();
 			let associated = {
 				include:
 					[
@@ -36,7 +52,7 @@ class auth extends csystem {
 			if (!care) {
 				return reject({ status: 401, message: "Wrong email or password" })
 			}
-			if(!care.dataValues.enabled){
+			if (!care.dataValues.enabled) {
 				return reject({ status: 401, message: `Account belonging to ${email} has been diabled` })
 			}
 			let user = care.dataValues
@@ -54,31 +70,32 @@ class auth extends csystem {
 			}
 			let { userId, authority, firstName, lastName } = user;
 			tmpUser = Object.assign({}, { userId, email, authority, firstName, lastName })
-			let token = this.token(tmpUser);
+			let token = this.createToken(tmpUser);
+			let decoded = jwt_decode(token);
+			let tokenExpiry = decoded.exp;
+			let { browser, os, platform } = req.useragent;
+			let ip = (req.headers['x-forwarded-for'] || req.ip).split(':').slice(-1)[0];
+			if (!ip.match(/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]/)) ip = "127.0.0.1"
+				;[err, care] = await to(this.sequelize.models.logins.create({ userUserId: userId, logins: new Date(), browser, os, platform, ip, token, tokenExpiry }));
 			return resolve({ token })
-		})
-	}
-
-	logout_ = async (req, res, next) => { // for some unknown reason login fails
-		return new Promise(async (resolve, reject) => {
-			resolve()
 		})
 	}
 
 	changePassword_ = async (req, res, next) => { // for some unknown reason login fails
 		return new Promise(async (resolve, reject) => {
-			let {password, oldpassword} = req.body;
-			let [err, care] = await to (this.isAuthenticated(req, res, next))
-			if(err)return reject(err);
+			let { password, oldpassword } = req.body;
+			let [err, care] = await to(this.isAuthenticated(req, res, next))
+			if (err) return reject(err);
 			let userId = care.userId;
-			;[err, care] = await to(this.sequelize.models.users.findOne({where:{userId}}));
-			if(err)return reject(err);
+			;[err, care] = await to(this.sequelize.models.users.findOne({ where: { userId } }));
+			if (err) return reject(err);
 			let email = care.dataValues.email;
+			email = email.toLowerCase();
 			let tmpReq = {
-				body:{email, password: oldpassword}
+				body: { email, password: oldpassword }
 			}
-			;[err, care] = await to(this.login_(tmpReq, res, next));
-			if(err)return reject({status: 422, message: "wrong password"});
+				;[err, care] = await to(this.login_(tmpReq, res, next));
+			if (err) return reject({ status: 422, message: "wrong password" });
 			let associated = {
 				include:
 					[
@@ -88,8 +105,8 @@ class auth extends csystem {
 						},
 					]
 			};
-			; [err, care] = await to(this.sequelize.models.users.findOne(
-				Object.assign({where:{userId}}, associated))
+			;[err, care] = await to(this.sequelize.models.users.findOne(
+				Object.assign({ where: { userId } }, associated))
 			);
 			let passwordObj = care.password
 				;[err, care] = await to(this.hashPassword(password))
@@ -99,152 +116,138 @@ class auth extends csystem {
 		})
 	}
 
-	// /** Set path for it */
-	// activateUser = (req) => {
-	// 	return new Promise(async (resolve, reject) => {
-	// 		let code = req.query.activateToken;
-	// 		let associated = {
-	// 			include:
-	// 				[
-	// 					{
-	// 						model: this.sequelize.models.activationCode,
-	// 						where: { code }
-	// 					},
-	// 				]
-	// 		}
-	// 		let [err, care] = await to(this.sequelize.models.users.findOne(
-	// 			Object.assign({}, associated))
-	// 		);
-	// 		if (!care) {
-	// 			return reject({ code: 409, message: "Account had been activated" })
-	// 		}
-	// 		let userId = care.dataValues.userId;
-	// 		await to(this.sequelize.models.users.update({ isActive: true }, { where: { userId } }))
-	// 		await to(care.activationCode.destroy())
-	// 			;[err, care] = await to(this.createPasswordCode(userId))
-	// 		resolve(care)
+	refreshToken_ = async (req, res, next) => {
+		return new Promise(async (resolve, reject) => {
+			let { userId, authority, firstName, lastName, email } = req.authenticatedUser;
+			let tmpUser = Object.assign({}, { userId, email, authority, firstName, lastName })
+			let currentToken = (req.headers.Authorization || req.headers.authorization || req.headers["X-Authorization"] || req.headers["x-authorization"] || '').split(" ").slice(-1)[0]
+			let [err, care] = await to(this.sequelize.models.logins.findOne({ where: { currentToken } }));
+			let token = this.createToken(tmpUser);
+			let decoded = jwt_decode(currentToken);
+			let tokenExpiry = decoded.exp;
+			let now = parseInt(new Date().getTime() / 1000);
+			if (tokenExpiry - now < 5 * 60) {
+				care.update({ token, tokenExpiry })
+			} else token = currentToken
+			return resolve({ token })
+		})
+	}
 
-	// 	})
-	// }
-	// createPasswordCode = async (userId) => {
-	// 	return new Promise(async (resolve, reject) => {
-	// 		let associated = {
-	// 			include:
-	// 				[
-	// 					{
-	// 						model: this.sequelize.models.passwordCode,
-	// 					},
-	// 				]
-	// 		};
-	// 		let [err, care] = await to(this.sequelize.models.users.findOne(Object.assign({ where: { userId } }, associated)));
-	// 		if (!care.passwordCode) {
-	// 			await to(this.sequelize.models.passwordCode.create({ userUserId: userId, code: '' }))
-	// 				;[err, care] = await to(this.sequelize.models.users.findOne(Object.assign({ where: { userId } }, associated)));
-	// 		}
-	// 		await to(care.passwordCode.update({ code: care.passwordCode.dataValues.codeId }))
-	// 		resolve({ code: care.passwordCode.dataValues.codeId })
-	// 	})
-	// }
+	logins_ = async (req, res, next) => {
+		return new Promise(async (resolve, reject) => {
+			let filters = {};
+			try {
+				filters = JSON.parse(req.query.filters)
+			} catch (error) { }
 
-	// createPassword = async (req) => {
-	// 	return new Promise(async (resolve, reject) => {
-	// 		let { passwordToken, password } = req.body;
-	// 		let associated = {
-	// 			include:
-	// 				[
-	// 					{
-	// 						model: this.sequelize.models.passwordCode,
-	// 						where: { code: passwordToken }
-	// 					},
-	// 				]
-	// 		};
-	// 		let [err, care] = await to(this.sequelize.models.users.findOne(
-	// 			Object.assign({}, associated))
-	// 		);
-	// 		if (!care) {
-	// 			return reject({ code: 422, message: `Not Account found matching ${passwordToken}` })
-	// 		}
-	// 		let passwordCode = care.passwordCode
-	// 		let userId = care.dataValues.userId
-	// 			;[err, care] = await to(this.hashPassword(password))
-	// 		let hashedPassword = care
-	// 		associated = {
-	// 			include:
-	// 				[
-	// 					{
-	// 						model: this.sequelize.models.password,
-	// 					},
-	// 				]
-	// 		};
-	// 		[err, care] = await to(this.sequelize.models.users.findOne(Object.assign({ where: { userId } }, associated)));
-	// 		if (!care.password) {
-	// 			await to(this.sequelize.models.password.create({ userUserId: userId, password: hashedPassword }))
-	// 		}
-	// 		else {
-	// 			[err, care] = await to(care.password.update({ password: hashedPassword }))
-	// 		}
-	// 		resolve()
-	// 		await to(passwordCode.destroy())
-	// 		return;
+			if (!req.isSysAdmin) {
+				if (!filters.userId) filters.userUserId = req.authenticatedUser.userId
+			}
+			if (filters.userId) {
+				filters.userUserId = filters.userId
+				delete filters.userId
+			}
+			for (let i in filters) {
+				let item = filters[i];
+				if (typeof item === 'object') {
+					let tmp = {}
+					for (let j in item) {
+						let key = j
+						let val = item[j];
+						tmp[Op[key]] = val
+					}
+					filters[i] = tmp
+				}
+			}
+			let where = filters;
+			// 
+			// let [err, care] = await to(this.sequelize.models.logins.findAll({ where }))
+			let associated = {
+				include:
+					[
+						{
+							model: this.sequelize.models.logins,
+							where
+						},
+					]
+			};
+			let [err, care] = await to(this.sequelize.models.users.findAll(Object.assign({}, associated)));
+			// console.log(care)
+			// resolve({})
+			// let [err, care] = await to(this.sequelize.models.users.findAll({ where }))
+			if (err) return reject(err)
+			let ret = [];
+			care.map(item => care.dataValues)
+			care.map(item0 => {
+				item0.logins.map(item => {
+					item = item.dataValues || item
+					item.userId = item.userUserId
+					delete item.userUserId
+					item.refreshedAt = item.updatedAt
+					delete item.updatedAt
+					item.email = item0.email
+					ret.push(item)
+					return item
+				})
+			})
 
-	// 	})
-	// }
-	// getPasswordResetCode = async (req, res, next) => {
-	// 	return new Promise(async (resolve, reject) => {
-	// 		let { sendActivationMail, email } = req.query;
-	// 		let [err, care] = await to(this.sequelize.models.users.findOne(
-	// 			{ where: { email } }
-	// 		));
-	// 		if (!care) {
-	// 			return reject({ code: 422, message: `${email} not found` })
-	// 		}
-	// 		let userId = care.dataValues.userId;
-	// 		;[err, care] = await to(this.createPasswordCode(userId))
-	// 		let code = care.code;
-	// 		resolve({ passwordToken: code })
-	// 		let tmpsendActivationMail = sendActivationMail
-	// 		switch (tmpsendActivationMail) {
-	// 			case true:
-	// 				sendActivationMail = true;
-	// 				break;
-	// 			case false:
-	// 				sendActivationMail = false;
-	// 				break;
-	// 			case "true":
-	// 				sendActivationMail = true;
-	// 				break;
-	// 			case "false":
-	// 				sendActivationMail = false;
-	// 				break;
-	// 			default:
-	// 				sendActivationMail = true;
-	// 		}
-	// 		if (sendActivationMail) {
-	// 			let config = this.config
-	// 			let accountActivation = require(path.join(__dirname, '../../../', 'emailTemplates/resetPassword'))
-	// 			accountActivation = accountActivation.replace(/{{system}}/g, config.extras.site.title)
-	// 				.replace(/{{api}}/g, config.extras.scheme + '://' + config.extras.domain)
-	// 				.replace(/{{token}}/g, code)
-	// 				.replace(/{{logo_url}}/g, config.extras.logo)
-	// 				.replace(/{{copyright_name}}/g, config.extras.copyright.name)
-	// 				.replace(/{{site}}/g, config.extras.copyright.url)
-
-	// 				;[err, care] = await to(this.sendEmail({
-	// 					subject: `${config.extras.site.title} Reset Password`,
-	// 					to: email,
-	// 					fromName: `Accounts`,
-	// 					html: accountActivation,
-	// 				}))
-	// 		}
-	// 	})
-	// }
-
+			// care.map(item => ret.push(item.dataValues))
+			// ret = ret.map(item => {
+			// 	item.userId = item.userUserId
+			// 	delete item.userUserId
+			// 	item.refreshedAt = item.updatedAt
+			// 	delete item.updatedAt
+			// 	return item
+			// })
+			resolve(ret);
+		})
+	}
 
 	functionsMap = () => {
 		return {
+			"api/auth/logins?filters": {
+				'GET': {
+					func: this.logins_,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
+					"tags": [
+						"auth-controller"
+					],
+					"summary": "logins",
+					"parameters": [
+						{
+							"name": "X-Authorization",
+							"in": "header",
+							"description": "bearer token",
+							"required": true,
+							"type": "string"
+						},
+						{
+							"name": "filters",
+							"in": "query",
+							"description": "filters",
+							"required": false,
+							"type": "string"
+						}
+					],
+					"responses": {
+						"200": {
+							"description": "OK",
+							"content": {
+								"application/json": {
+								}
+							}
+						}
+					}
+				}
+			},
 			"api/auth/login": {
 				'POST': {
-					func: this.login_, // for some unknown reason login fails
+					func: this.login_, // for some unknown reason login fails. because it is a method of parent
+					requiresLogin: false,
+					requiresAdmin: false,
+					doForAnother: false,
 					"tags": [
 						"auth-controller"
 					],
@@ -276,6 +279,9 @@ class auth extends csystem {
 			"api/auth/changePassword": {
 				'POST': {
 					func: this.changePassword_,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
 					"tags": [
 						"auth-controller"
 					],
@@ -313,13 +319,53 @@ class auth extends csystem {
 					}
 				}
 			},
-			"api/auth/logout": {
+			"api/auth/logout?x-authorization": {
 				'GET': {
-					func: this.logout_, // for some unknown reason login fails
+					func: this.logout_,
+					requiresLogin: false,
+					requiresAdmin: false,
+					doForAnother: false,
 					"tags": [
 						"auth-controller"
 					],
 					"summary": "logout",
+					"parameters": [
+						{
+							"name": "X-Authorization",
+							"in": "header",
+							"description": "bearer token",
+							"required": false,
+							"type": "string"
+						},
+						{
+							"name": "x-authorization",
+							"in": "query",
+							"description": "token",
+							"required": false,
+							"type": "string"
+						}
+					],
+					"responses": {
+						"200": {
+							"description": "OK",
+							"content": {
+								"application/json": {
+								}
+							}
+						}
+					}
+				}
+			},
+			"api/auth/token": {
+				'GET': {
+					func: this.refreshToken_,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
+					"tags": [
+						"auth-controller"
+					],
+					"summary": "getToken",
 					"responses": {
 						"200": {
 							"description": "OK",
@@ -340,6 +386,33 @@ class auth extends csystem {
 					]
 				}
 			},
+			// "api/auth/logout": {
+			// 	'GET': {
+			// 		func: this.logout_, // for some unknown reason login fails
+			// 		"tags": [
+			// 			"auth-controller"
+			// 		],
+			// 		"summary": "logout",
+			// 		"responses": {
+			// 			"200": {
+			// 				"description": "OK",
+			// 				"content": {
+			// 					"application/json": {
+			// 					}
+			// 				}
+			// 			}
+			// 		},
+			// 		"parameters": [
+			// 			{
+			// 				"name": "X-Authorization",
+			// 				"in": "header",
+			// 				"description": "bearer token",
+			// 				"required": true,
+			// 				"type": "string"
+			// 			}
+			// 		]
+			// 	}
+			// },
 
 		}
 	}
@@ -355,12 +428,22 @@ class auth extends csystem {
 
 	async main(req, res, next) {
 		return new Promise(async (resolve, reject) => {
-			// let func = this.pathExists(req)
-			let {func, requiresAdmin, doForAnother} =  this.pathExists(req)
-			if (!func) {
-				return reject({ code: 404, message: "Path not allowed" })
+			// // let func = this.pathExists(req)
+			// let { func, requiresAdmin, doForAnother } = this.pathExists(req)
+			// if (!func) {
+			// 	return reject({ code: 404, message: "Path not allowed" })
+			// }
+			// let [err, care] = await to(func(req, res, next));
+			// if (err) {
+			// 	return reject(err)
+			// }
+			// res.send(care)
+			let [err, care] = await to(helpers.processRequirements(req, res, next));
+			if (err) {
+				return reject(err)
 			}
-			let [err, care] = await to(func(req, res, next));
+			let func = care.func;
+			;[err, care] = await to(func(req, res, next));
 			if (err) {
 				return reject(err)
 			}

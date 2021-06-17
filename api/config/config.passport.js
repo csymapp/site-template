@@ -41,7 +41,7 @@ passport.deserializeUser((id, done) => {
 
 passport.generateToken = (user, secret) => {
   let token = jwt.sign(user, secret, {
-    expiresIn: 1000
+    expiresIn: 3600 * 10
   });
   return token
 }
@@ -76,13 +76,6 @@ passport.use(new LocalStrategy({ usernameField: 'email' }, async (email, passwor
 }));
 
 JwtStrategy.prototype.authorizationParams = function () {
-  console.log('||||||||||||||||||')
-  console.log('||||||||||||||||||')
-  console.log('||||||||||||||||||')
-  console.log('||||||||||||||||||')
-  console.log('||||||||||||||||||', JwtStrategy.prototype.authorizationParams)
-  console.log('||||||||||||||||||', JwtStrategy.prototype.authorizationParams.caller)
-  console.log('||||||||||||||||||', JwtStrategy.prototype.authorizationParams.caller.arguments)
   const req = JwtStrategy.Strategy.authorizationParams.caller.arguments[0];
   // do whatever you need
 }

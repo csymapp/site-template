@@ -25,31 +25,15 @@ class router {
 		let app;
 		let [err, care, dontcare] = [];
 
-		// console.log('loading page...')
 		// console.log(appname, func, app)
 
 		try {
 			// console.log(__dirname + '/../' + appname)
-			console.log('llllllllllll')
-			console.log('llllllllllll')
-			console.log('llllllllllll')
-			console.log('llllllllllll')
-			console.log('llllllllllll')
-			
+
 			app = (new (require(__dirname + '/../' + appname))(config))// /api/users/uid;
-			console.log('PPPPPPPPPPP')
-			console.log('PPPPPPPPPPP')
-			console.log('PPPPPPPPPPP')
-			console.log('PPPPPPPPPPP')
-			console.log('PPPPPPPPPPP')
 			if (app === undefined) throw ({ code: "MODULE_NOT_FOUND" }); //what type of error is this?
-			// console.log(app)
-			// console.log(JSON.stringify(app))
-			// console.log(app.main)
 			if (app[func] === undefined) throw ({ code: "NOT FUNCTION OF MODULE", status: 404 }); //what type of error is this?
 		} catch (error) {
-			console.log('aaaaaaaaaaaaaa')
-			console.log(error)
 			if (error.code === "MODULE_NOT_FOUND") { //the app does not exist /{app}/method/etc
 				self.errorHandler(req, res, error, next)
 				return;
@@ -57,45 +41,20 @@ class router {
 
 			if (error.code === "NOT FUNCTION OF MODULE") {
 				try {
-					// console.log('BBBBBBBBBBBBBBBBBB');
-					// console.log(__dirname + `/../${appname}/${func}`)
-					// console.log(require(__dirname + `/../${appname}/${func}`))
-					// console.log(new require(__dirname + `/../${appname}/${func}`))
-					// /app/module/index.js
-					// app = (new (require(__dirname+`/../${appname}/${func}`)))
-					// (new (
-					// require(__dirname+'/../'+appname))(config)
-					//)
-					// console.log('ppppppp', __dirname + `/../${appname}/${func}`)
 					let tmp = require(__dirname + `/../${appname}/${func}`);
-					// console.log('ppppppp')
-					// console.log('-----------')
-					// console.log('-----------')
-					// console.log('-----------', __dirname + `/../${appname}/${func}`)
-					// console.log(tmp.auth)
-					// console.log(typeof tmp)
-					// console.log(require(__dirname + '/../' + appname))
-					// console.log(require(`/var/www/html/csycms/SITE1/api/apps/api/auth`))
-					// app = new (require(__dirname + `/../${appname}/${func}`))(config)
-					try{
+					try {
 						app = new tmp(config)
-					}catch(err){
+					} catch (err) {
 						app = new tmp[func](config)
 					}
-					
+
 					func = self.defaultMethod(req.params.v1)
 				} catch (err) {
-					console.log(err)
-					// console.log(err.message)
-					// console.log('CCCCCCCCCCCCCCCCCC')
 					if (err.message !== "require(...) is not a constructor") { //the app does not exist /{app}/method/etc
 						error.message = "Not found"
 						self.errorHandler(req, res, error, next)
 						return;
 					}
-
-					// /app/module/index.js[module]
-					// console.log(`${appname}/${func}`)
 					try {
 						app = (new (require(__dirname + `/../${appname}/${func}`))[func])
 						func = self.defaultMethod(req.params.v1)
@@ -107,15 +66,12 @@ class router {
 			}
 		}
 
-		// console.log(app)
-		console.log('ahisop')
-		// console.log(app)
-			;[err, dontcare] = await to(app.setup(req, res, next))
+		;[err, dontcare] = await to(app.setup(req, res, next))
 		try {
 			;[err, dontcare] = await to(app[func](req, res, next));
 			if (err) throw (err)			//if func is a param instead of a function, or func does not exist
 		} catch (error) {
-			console.log(error)
+			// console.log(error)
 			if (error.name === "TypeError")
 				try {
 					;[err, dontcare] = await to(app["main"](req, res, next))

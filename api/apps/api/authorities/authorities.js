@@ -124,9 +124,6 @@ class users extends csystem {
 
 	patchUser = async (req, res, next) => {
 		return new Promise(async (resolve, reject) => {
-			console.log('1111111111111111111111')
-			console.log('1111111111111111111111')
-			console.log('1111111111111111111111')
 			let [err, care] = await to(this.isAuthenticated(req, res, next))
 			if (err) return reject(err)
 			let body = Object.assign({}, req.body);
@@ -185,11 +182,6 @@ class users extends csystem {
 
 			
 
-			console.log('2222222222222')
-			console.log('2222222222222')
-			console.log('2222222222222')
-			console.log('2222222222222', typeof body.enabled)
-			console.log('2222222222222')
 			if(body.enabled) body.enabled = this.parseBool(body.enabled)
 
 			;[err, care] = await to(selectedUser.update(body))
@@ -377,6 +369,7 @@ class users extends csystem {
 
 	fetchActivationCode = async (email) => {
 		return new Promise(async (resolve, reject) => {
+			email = email.toLowerCase();
 			let associated = {
 				include:
 					[
@@ -390,7 +383,6 @@ class users extends csystem {
 			}
 			await to(care.activationCode.update({ code: care.activationCode.dataValues.codeId }))
 			if (err || !care) return resolve({});
-			console.log()
 			return resolve({ code: care.activationCode.dataValues.codeId })
 		})
 	}
@@ -580,13 +572,13 @@ class users extends csystem {
 											"type": { type: "string" }
 										},
 										"additionalInfo": { type: "string" },
-										"authority": { type: "string", enum: ["SYS_ADMIN|PHARMACY_ADMIN|SYS_USER"] }, // enum
+										"authority": { type: "string", enum: ["SYS_ADMIN","SYS_USER"] }, // enum
 										"createdTime": 0,
 										"email": { type: "string" },
 										"firstName": { type: "string" },
 										"lastName": { type: "string" },
 										"isActive": { type: "boolean" },
-										"gender": { type: "string", enum: ["Male|Female"] },
+										"gender": { type: "string", enum: ["Male","Female"] },
 										"dateOfBirth": { type: "string" },
 									}
 								}
@@ -704,13 +696,13 @@ class users extends csystem {
 											"type": { type: "string" }
 										},
 										"additionalInfo": { type: "string" },
-										"authority": { type: "string", enum: ["SYS_ADMIN|PHARMACY_ADMIN|SYS_USER"] }, // enum
+										"authority": { type: "string", enum: ["SYS_ADMIN","SYS_USER"] }, // enum
 										"createdTime": 0,
 										"email": { type: "string" },
 										"firstName": { type: "string" },
 										"lastName": { type: "string" },
 										"isActive": { type: "boolean" },
-										"gender": { type: "string", enum: ["Male|Female"] },
+										"gender": { type: "string", enum: ["Male","Female"] },
 										"dateOfBirth": { type: "string" },
 									}
 								}

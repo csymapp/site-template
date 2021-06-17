@@ -1,7 +1,7 @@
 'use strict'
 
-const { resolve, reject } = require('bluebird');
-
+// const { resolve, reject } = require('bluebird');
+const jwt_decode = require("jwt-decode").default;
 const to = require('await-to-js').to
 const csystem = require(__dirname + "/../../csystem").csystem;
 const etc = require('node-etc')
@@ -10,13 +10,17 @@ const path = require('path');
 // const saltRounds = 10;
 // const {sequelize} = require(__dirname+"/../../csystem").models
 // const Familyfe = require(__dirname+'/../../../modules/node-familyfe')(sequelize)
-let sequelize, Familyfe;
+// let sequelize, Familyfe;
+
+const helpers_ = require('../helpers').helpers
+let helpers;
 
 
 class users extends csystem {
 
 	constructor(config) {
 		super(config);
+		helpers = new helpers_(this)
 	}
 
 	// removeSomeFields(care) {
@@ -124,9 +128,6 @@ class users extends csystem {
 
 	patchUser = async (req, res, next) => {
 		return new Promise(async (resolve, reject) => {
-			console.log('1111111111111111111111')
-			console.log('1111111111111111111111')
-			console.log('1111111111111111111111')
 			let [err, care] = await to(this.isAuthenticated(req, res, next))
 			if (err) return reject(err)
 			let body = Object.assign({}, req.body);
@@ -145,7 +146,7 @@ class users extends csystem {
 			if (body.userId) userId = body.userId;
 			let selectedUser;
 			;[err, care] = await to(this.sequelize.models.users.findOne({ where: { userId } }))
-			if (err || !care)selectedUser=false;
+			if (err || !care) selectedUser = false;
 			else selectedUser = care
 			/**
 			 * Only a SYS_ADMIN can modify other accounts
@@ -154,7 +155,7 @@ class users extends csystem {
 				/** check that user exists */
 				// userId = body.userId;
 				// ;[err, care] = await to(this.sequelize.models.users.findOne({ where: { userId } }))
-				
+
 				// if (err || !care) return reject({ status: 422, message: `${userId} not found` })
 				if (!selectedUser) return reject({ status: 422, message: `${userId} not found` })
 				/** trying to patch other user's account */
@@ -174,26 +175,22 @@ class users extends csystem {
 			if (body.isActive) delete body.isActive;
 
 			/** fields that cannot be modified by self */
-			if(userId === isAuthenticated.userId){
+			if (userId === isAuthenticated.userId) {
 				if (body.authority) delete body.authority;
 			}
 			/** fields that can only be modified by SYS_ADMIN */
-			if(!isSysAdmin){
+			if (!isSysAdmin) {
 				if (body.authority) delete body.authority;
 				if (body.enabled) delete body.enabled;
 			}
 
-			
-
-			console.log('2222222222222')
-			console.log('2222222222222')
-			console.log('2222222222222')
-			console.log('2222222222222', typeof body.enabled)
-			console.log('2222222222222')
-			if(body.enabled) body.enabled = this.parseBool(body.enabled)
+			if (body.enabled) body.enabled = this.parseBool(body.enabled);
+			if (body.additionalInfo && typeof body.additionalInfo === 'object') {
+				body.additionalInfo = JSON.stringify(body.additionalInfo)
+			}
 
 			;[err, care] = await to(selectedUser.update(body))
-			if(err){
+			if (err) {
 				let tmpErr = err + ''
 				if (tmpErr.match(/Incorrect ([0-9a-zA-Z]+) value: '([0-9a-zA-Z ]+)' for column `([0-9a-zA-Z]+)`.`([0-9a-zA-Z]+)`.`([0-9a-zA-Z]+)`/)) {
 					tmpErr.replace(/Incorrect ([0-9a-zA-Z]+) value: '([0-9a-zA-Z ]+)' for column `([0-9a-zA-Z]+)`.`([0-9a-zA-Z]+)`.`([0-9a-zA-Z]+)`/, (match, p1, p2, p3, p4, p5, offset, string) => {
@@ -210,10 +207,24 @@ class users extends csystem {
 						})
 					}
 				}
-				return reject({status: 422, message:tmpErr})
+				return reject({ status: 422, message: tmpErr })
 			}
-			resolve({care:care, body, enabled: typeof body.enabled});
 
+			let associated = {
+				include:
+					[
+						{ model: this.sequelize.models.logins },
+					]
+			};
+			// ;[err, care] = await to(this.sequelize.models.users.findOne({ where: { userId }, }))
+			;[err, care] = await to(this.sequelize.models.users.findOne(Object.assign({ where: { userId } }, associated)));
+			let ret = {};
+			ret = care.dataValues;
+			ret.additionalInfo = {
+				lastLoginTs: ret.logins.slice(-1)[0].logins
+			}
+			delete ret.logins
+			resolve(ret)
 		})
 	}
 	getUserById = async (req, res, next) => {
@@ -234,16 +245,73 @@ class users extends csystem {
 			resolve(care)
 		})
 	}
+
+	deleteUserById = async (req, res, next) => {
+		return new Promise(async (resolve, reject) => {
+			let userId = req.query.userId
+			let [err, care] = await to(this.sequelize.models.users.destroy({ where: { userId } }))
+			if (err) reject({ status: 422, message: err })
+			resolve()
+		})
+	}
+	getOrganizationFromId = async (organization) => {
+		return new Promise(async (resolve, reject) => {
+			let { organizationId } = organization
+			let [err, care] = await to(this.sequelize.models.organizations.findOne({ where: { organizationId } }))
+			if (err) reject({ status: 422, message: err })
+			let { organizationName } = care.dataValues
+			resolve({ organizationName, organizationId })
+		})
+	}
+
 	getLoggedInUser = async (req, res, next) => {
 		return new Promise(async (resolve, reject) => {
 			let [err, care] = await to(this.isAuthenticated(req, res, next))
 			if (err) return reject(err)
 			let isAuthenticated, isSysAdmin
 			isAuthenticated = care;
-			let userId = isAuthenticated.userId
-				;[err, care] = await to(this.sequelize.models.users.findOne({ where: { userId } }))
+			let userId = isAuthenticated.userId;
+			let associated = {
+				include:
+					[
+						{ model: this.sequelize.models.logins },
+						{ model: this.sequelize.models.organizationUser }
+					]
+			};
+			// ;[err, care] = await to(this.sequelize.models.users.findOne({ where: { userId }, }))
+			;[err, care] = await to(this.sequelize.models.users.findOne(Object.assign({ where: { userId } }, associated)));
+			let ret = {};
+			ret = care.dataValues;
+			ret.additionalInfo = {
+				lastLoginTs: ret.logins.slice(-1)[0].logins
+			}
+			let organizationUsers = JSON.parse(JSON.stringify(ret.organizationUsers));
+			organizationUsers = organizationUsers.map(itemTmp => {
+				let item = itemTmp.dataValues || itemTmp
+				delete item.createdAt
+				delete item.updatedAt
+				item.userId = item.userUserId
+				item.organizationId = item.organizationOrganizationId
+				delete item.userUserId
+				delete item.organizationOrganizationId
+				return item;
+			})
+			ret.organizations = organizationUsers
+			delete ret.organizationUsers
+			delete ret.logins
+
 			if (err) return reject(err)
-			resolve(care)
+			let promises = ret.organizations.map(this.getOrganizationFromId);
+			;[err, care] = await to(Promise.all(promises));
+			care.map(item => {
+				let { organizationName, organizationId } = item;
+				for (let i in ret.organizations) {
+					if (ret.organizations[i].organizationId === organizationId) {
+						ret.organizations[i].organizationName = organizationName
+					}
+				}
+			})
+			resolve(ret)
 		})
 	}
 
@@ -353,8 +421,10 @@ class users extends csystem {
 					sendActivationMail = true;
 			}
 
+			// console.log(tmpsendActivationMail)
+			await to(this.fetchActivationCode(createdUser.email))
 			if (sendActivationMail) {
-				await this.sendActivationMail(createdUser.email)
+				await this.sendActivationMail(createdUser.email, req.body.activationPage)
 			}
 		})
 	}
@@ -377,6 +447,7 @@ class users extends csystem {
 
 	fetchActivationCode = async (email) => {
 		return new Promise(async (resolve, reject) => {
+			email = email.toLowerCase()
 			let associated = {
 				include:
 					[
@@ -390,15 +461,24 @@ class users extends csystem {
 			}
 			await to(care.activationCode.update({ code: care.activationCode.dataValues.codeId }))
 			if (err || !care) return resolve({});
-			console.log()
 			return resolve({ code: care.activationCode.dataValues.codeId })
 		})
 	}
 
-	sendActivationMail = async (email) => {
+	sendActivationMail = async (email, activationPage = false) => {
+
 		return new Promise(async (resolve, reject) => {
+			if (typeof email !== "string") {
+				let req = email;
+				let { userId } = req.body
+				let [err, care] = await to(this.sequelize.models.users.findOne({ where: { userId } }));
+				email = care.dataValues.email
+			}
 			let [err, care] = await to(this.fetchActivationCode(email))
 			let activationCode = care.code
+			if (activationPage) {
+				activationCode += `.</strong><br/> You can use <a href="${activationPage}?activateToken=${care.code}">this link</a> to activate`
+			}
 			let accountActivation = require(path.join(__dirname, '../../../', 'emailTemplates/accountActivation'))
 
 			let config = this.config
@@ -420,152 +500,270 @@ class users extends csystem {
 	}
 
 
+	listUserOrganizations = async (req, res, next) => {
+		return new Promise(async (resolve, reject) => {
+			let userId = req.query.userId
+			let [err, care] = await to(this.sequelize.models.organizations.findAll({ where: { userUserId: userId }, attributes: ['organizationId', 'organizationName'] }))
+			if (err) return reject(err)
+			let ret = [];
+			care.map(item => ret.push(item.dataValues));
 
-	/** Set path for it */
-	// activateUser = (req) => {
-	// 	return new Promise(async (resolve, reject) => {
-	// 		let code = req.query.activateToken;
-	// 		let associated = {
-	// 			include:
-	// 				[
-	// 					{
-	// 						model: this.sequelize.models.activationCode,
-	// 						where: { code }
-	// 					},
-	// 				]
-	// 		}
-	// 		let [err, care] = await to(this.sequelize.models.users.findOne(
-	// 			Object.assign({}, associated))
-	// 		);
-	// 		if (!care) {
-	// 			return reject({ code: 409, message: "Account had been activated" })
-	// 		}
-	// 		let userId = care.dataValues.userId;
-	// 		await to(this.sequelize.models.users.update({ isActive: true }, { where: { userId } }))
-	// 		await to(care.activationCode.destroy())
-	// 			;[err, care] = await to(this.createPasswordCode(userId))
-	// 		resolve(care)
+			// organizations where user has roles
+			let associated = {
+				include:
+					[
+						{
+							model: this.sequelize.models.organizationUser,
+							where: { userUserId: userId },
+							required: true,
+							// subQuery: false,
+						},
+					]
+			};
+			;[err, care] = await to(this.sequelize.models.organizations.findAll(Object.assign({}, associated)))
+			care.map(item => {
+				item = item.dataValues
+				delete item.organizationUsers
+				ret.push(item)
+			});
+			resolve(ret);
+		})
+	}
 
-	// 	})
-	// }
-	// createPasswordCode = async (userId) => {
-	// 	return new Promise(async (resolve, reject) => {
-	// 		let associated = {
-	// 			include:
-	// 				[
-	// 					{
-	// 						model: this.sequelize.models.passwordCode,
-	// 					},
-	// 				]
-	// 		};
-	// 		let [err, care] = await to(this.sequelize.models.users.findOne(Object.assign({ where: { userId } }, associated)));
-	// 		if (!care.passwordCode) {
-	// 			await to(this.sequelize.models.passwordCode.create({ userUserId: userId, code: '' }))
-	// 				;[err, care] = await to(this.sequelize.models.users.findOne(Object.assign({ where: { userId } }, associated)));
-	// 		}
-	// 		await to(care.passwordCode.update({ code: care.passwordCode.dataValues.codeId }))
-	// 		resolve({ code: care.passwordCode.dataValues.codeId })
-	// 	})
-	// }
+	listUserFacilities = async (req, res, next) => {
+		/**
+		 * List from facilityUser
+		 * List from Org_Authority
+		 */
+		return new Promise(async (resolve, reject) => {
+			let userId = req.query.userId
+			/**
+			 * member of organization having facility
+			 */
+			let associated = {
+				include:
+					[
+						{
+							model: this.sequelize.models.organizations,
+							attributes: ['organizationId', 'organizationName'],
+							required: true,
+							subQuery: false,
 
-	// createPassword = async (req) => {
-	// 	return new Promise(async (resolve, reject) => {
-	// 		let { passwordToken, password } = req.body;
-	// 		let associated = {
-	// 			include:
-	// 				[
-	// 					{
-	// 						model: this.sequelize.models.passwordCode,
-	// 						where: { code: passwordToken }
-	// 					},
-	// 				]
-	// 		};
-	// 		let [err, care] = await to(this.sequelize.models.users.findOne(
-	// 			Object.assign({}, associated))
-	// 		);
-	// 		if (!care) {
-	// 			return reject({ code: 422, message: `Not Account found matching ${passwordToken}` })
-	// 		}
-	// 		let passwordCode = care.passwordCode
-	// 		let userId = care.dataValues.userId
-	// 			;[err, care] = await to(this.hashPassword(password))
-	// 		let hashedPassword = care
-	// 		associated = {
-	// 			include:
-	// 				[
-	// 					{
-	// 						model: this.sequelize.models.password,
-	// 					},
-	// 				]
-	// 		};
-	// 		[err, care] = await to(this.sequelize.models.users.findOne(Object.assign({ where: { userId } }, associated)));
-	// 		if (!care.password) {
-	// 			await to(this.sequelize.models.password.create({ userUserId: userId, password: hashedPassword }))
-	// 		}
-	// 		else {
-	// 			[err, care] = await to(care.password.update({ password: hashedPassword }))
-	// 		}
-	// 		resolve()
-	// 		await to(passwordCode.destroy())
-	// 		return;
+							include:
+								[
+									{
+										model: this.sequelize.models.organizationUser,
+										where: { userUserId: userId },
+										required: true,
+										// subQuery: false,
+									},
+									{
+										model: this.sequelize.models.facilities,
+										required: true,
+										// subQuery: false,
+									},
+								]
+						}
+					]
+			};
+			let [err, care] = await to(this.sequelize.models.users.findAll(Object.assign({ where: {}, attributes: ['userId', 'email', 'firstName', 'lastName', 'authority'] }, associated)))
+			// let [err, care] = await to(this.sequelize.models.organizations.findAll(Object.assign({ where: { userUserId: userId }, attributes: ['organizationId', 'organizationName'] }, associated)))
+			if (err) return reject(err)
+			let ret = [];
+			care = care.map(item => item.dataValues)
+			care.map(userData => {
+				userData.organizations.map(organizationsData => {
+					organizationsData = organizationsData.dataValues || organizationsData
+					organizationsData.facilities.map(
+						item => {
+							item = item.dataValues || item
+							let tmp = item
+							tmp.email = userData.email
+							tmp.firstName = userData.firstName
+							tmp.lastName = userData.lastName
+							tmp.authority = userData.authority
+							tmp.organizationId = organizationsData.organizationId
+							tmp.organizationName = organizationsData.organizationName
+							// console.log({tmp})
+							ret.push(tmp)
+							return item
+						}
+					)
+				})
+			})
+			/**
+			 * owner of organization having facility
+			 */
+			associated = {
+				include:
+					[
+						{
+							model: this.sequelize.models.organizations,
+							attributes: ['organizationId', 'organizationName'],
+							required: true,
+							subQuery: false,
+							where: { userUserId: userId },
+							include:
+								[
+									{
+										model: this.sequelize.models.organizationUser,
+										required: true,
+										// subQuery: false,
+									},
+									{
+										model: this.sequelize.models.facilities,
+										required: true,
+										// subQuery: false,
+									},
+								]
+						}
+					]
+			};
+			;[err, care] = await to(this.sequelize.models.users.findAll(Object.assign({ where: {}, attributes: ['userId', 'email', 'firstName', 'lastName', 'authority'] }, associated)))
+			// let [err, care] = await to(this.sequelize.models.organizations.findAll(Object.assign({ where: { userUserId: userId }, attributes: ['organizationId', 'organizationName'] }, associated)))
+			// console.log(care)
+			if (err) return reject(err)
+			// ret = [];
+			care = care.map(item => item.dataValues)
+			care.map(userData => {
+				userData.organizations.map(organizationsData => {
+					organizationsData = organizationsData.dataValues || organizationsData
+					organizationsData.facilities.map(
+						item => {
+							item = item.dataValues || item
+							let tmp = item
+							tmp.email = userData.email
+							tmp.firstName = userData.firstName
+							tmp.lastName = userData.lastName
+							tmp.authority = userData.authority
+							tmp.organizationId = organizationsData.organizationId
+							tmp.organizationName = organizationsData.organizationName
+							// console.log({tmp})
+							ret.push(tmp)
+							return item
+						}
+					)
+				})
+			})
+			/**
+			 * member of facility
+			 */
+			associated = {
+				include:
+					[
+						{
+							model: this.sequelize.models.organizations,
+							attributes: ['organizationId', 'organizationName'],
+							required: true,
+							subQuery: false,
+							// where: { userUserId: userId },
+							include:
+								[
+									{
+										model: this.sequelize.models.organizationUser,
+										required: true,
+										// subQuery: false,
+									},
+									{
+										model: this.sequelize.models.facilities,
+										required: true,
+										subQuery: false,
+										include: [
+											{
+												model: this.sequelize.models.facilityUser,
+												// attributes: ['organizationId', 'organizationName'],
+												required: true,
+												// subQuery: false,
+												where: { userUserId: userId },
+											}
+										]
+									},
+								]
+						}
+					]
+			};
+			;[err, care] = await to(this.sequelize.models.users.findAll(Object.assign({ where: {}, attributes: ['userId', 'email', 'firstName', 'lastName', 'authority'] }, associated)))
+			if (err) return reject(err)
+			care = care.map(item => item.dataValues)
+			care.map(userData => {
+				userData.organizations.map(organizationsData => {
+					organizationsData = organizationsData.dataValues || organizationsData
+					organizationsData.facilities.map(
+						item => {
+							item = item.dataValues || item
+							let tmp = item
+							tmp.email = userData.email
+							tmp.firstName = userData.firstName
+							tmp.lastName = userData.lastName
+							tmp.authority = userData.authority
+							tmp.organizationId = organizationsData.organizationId
+							tmp.organizationName = organizationsData.organizationName
+							// console.log({tmp})
+							ret.push(tmp)
+							return item
+						}
+					)
+				})
+			})
+			let filteredRet = {};
+			ret.map(item => {
+				filteredRet[item.facilityId] = item
+			})
+			ret = [];
+			for (let i in filteredRet) {
+				ret.push(filteredRet[i])
+			}
+			resolve(ret);
+		})
+	}
 
-	// 	})
-	// }
-	// getPasswordResetCode = async (req, res, next) => {
-	// 	return new Promise(async (resolve, reject) => {
-	// 		let { sendActivationMail, email } = req.query;
-	// 		let [err, care] = await to(this.sequelize.models.users.findOne(
-	// 			{ where: { email } }
-	// 		));
-	// 		if (!care) {
-	// 			return reject({ code: 422, message: `${email} not found` })
-	// 		}
-	// 		let userId = care.dataValues.userId;
-	// 		;[err, care] = await to(this.createPasswordCode(userId))
-	// 		let code = care.code;
-	// 		resolve({ passwordToken: code })
-	// 		let tmpsendActivationMail = sendActivationMail
-	// 		switch (tmpsendActivationMail) {
-	// 			case true:
-	// 				sendActivationMail = true;
-	// 				break;
-	// 			case false:
-	// 				sendActivationMail = false;
-	// 				break;
-	// 			case "true":
-	// 				sendActivationMail = true;
-	// 				break;
-	// 			case "false":
-	// 				sendActivationMail = false;
-	// 				break;
-	// 			default:
-	// 				sendActivationMail = true;
-	// 		}
-	// 		if (sendActivationMail) {
-	// 			let config = this.config
-	// 			let accountActivation = require(path.join(__dirname, '../../../', 'emailTemplates/resetPassword'))
-	// 			accountActivation = accountActivation.replace(/{{system}}/g, config.extras.site.title)
-	// 				.replace(/{{api}}/g, config.extras.scheme + '://' + config.extras.domain)
-	// 				.replace(/{{token}}/g, code)
-	// 				.replace(/{{logo_url}}/g, config.extras.logo)
-	// 				.replace(/{{copyright_name}}/g, config.extras.copyright.name)
-	// 				.replace(/{{site}}/g, config.extras.copyright.url)
-
-	// 				;[err, care] = await to(this.sendEmail({
-	// 					subject: `${config.extras.site.title} Reset Password`,
-	// 					to: email,
-	// 					fromName: `Accounts`,
-	// 					html: accountActivation,
-	// 				}))
-	// 		}
-	// 	})
-	// }
+	/**
+	 * Log in as User
+	 * User must be active and enabled
+	 * @param {*} req 
+	 * @param {*} res 
+	 * @param {*} next 
+	 */
+	loginasUser = async (req, res, next) => {
+		return new Promise(async (resolve, reject) => {
+			let userId = req.query.userId
+			let [err, care] = await to(this.sequelize.models.users.findOne(Object.assign({ where: { userId } }, {})));
+			let { email } = care.dataValues
+			email = email.toLowerCase()
+			if (!care.dataValues.enabled) {
+				return reject({ status: 401, message: `Account belonging to ${email} has been disabled.` })
+			}
+			if (!care.dataValues.isActive) {
+				return reject({ status: 401, message: `Account belonging to ${email} has not been activated.` })
+			}
+			let user = care.dataValues
+			let tmpUser = {};
+			for (let i in user) {
+				if ('object' !== typeof user[i]) {
+					tmpUser[i] = user[i]
+				}
+			}
+			let { authority, firstName, lastName } = user;
+			tmpUser = Object.assign({}, { userId, email, authority, firstName, lastName })
+			let token = this.createToken(tmpUser);
+			let decoded = jwt_decode(token);
+			let tokenExpiry = decoded.exp;
+			let { browser, os, platform } = req.useragent;
+			let ip = (req.headers['x-forwarded-for'] || req.ip).split(':').slice(-1)[0];
+			if (!ip.match(/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]/)) ip = "127.0.0.1"
+				;[err, care] = await to(this.sequelize.models.logins.create({ userUserId: userId, logins: new Date(), browser, os, platform, ip, token, tokenExpiry }));
+			return resolve({ token })
+		})
+	}
 
 	functionsMap = () => {
 		return {
 			"api/user?sendActivationMail": {
 				'POST': {
 					func: this.saveUser,
+					requiresLogin: false,
+					requiresAdmin: false,
+					doForAnother: false,
 					"tags": [
 						"user-controller"
 					],
@@ -576,18 +774,16 @@ class users extends csystem {
 							"application/json": {
 								"schema": {
 									"properties": {
-										"userId": {
-											"type": { type: "string" }
-										},
+										"userId": { type: "string" },
 										"additionalInfo": { type: "string" },
-										"authority": { type: "string", enum: ["SYS_ADMIN|PHARMACY_ADMIN|SYS_USER"] }, // enum
-										"createdTime": 0,
+										"authority": { type: "string", enum: ["SYS_ADMIN", "SYS_USER"] }, // enum
 										"email": { type: "string" },
 										"firstName": { type: "string" },
 										"lastName": { type: "string" },
 										"isActive": { type: "boolean" },
-										"gender": { type: "string", enum: ["Male|Female"] },
+										"gender": { type: "string", enum: ["Male", "Female"] },
 										"dateOfBirth": { type: "string" },
+										"activationPage": { type: "string", required: false },
 									}
 								}
 							}
@@ -627,13 +823,151 @@ class users extends csystem {
 					}
 				}
 			},
-			"api/user?userId": {
+			"api/user/token?userId": {
 				'GET': {
-					func: this.getUserById,
+					func: this.loginasUser,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
 					"tags": [
 						"user-controller"
 					],
+					ensureExists: [
+						"user"
+					],
+					"summary": "loginasUser",
+					"parameters": [
+						{
+							"name": "X-Authorization",
+							"in": "header",
+							"description": "bearer token",
+							"required": true,
+							"type": "string"
+						}, {
+							"name": "userId",
+							"in": "query",
+							"description": "userId",
+							"required": true,
+							"type": "string"
+						}
+					],
+					"responses": {
+						"200": {
+							"description": "OK",
+							"content": {
+								"application/json": {
+								}
+							}
+						}
+					}
+				}
+			},
+			"api/user/activationEmail": {
+				'POST': {
+					func: this.sendActivationMail,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
+					"tags": [
+						"user-controller"
+					],
+					ensureExists: [
+						"user"
+					],
+					"summary": "sendActivationEmail",
+					"parameters": [
+						{
+							"name": "X-Authorization",
+							"in": "header",
+							"description": "bearer token",
+							"required": true,
+							"type": "string"
+						}
+					],
+					"requestBody": {
+						"required": true,
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"userId": {
+											"type": "string"
+										},
+										"userId": { type: "string", required: true },
+										"activationPage": { type: "string", required: true },
+									}
+								}
+							}
+						}
+					},
+					"responses": {
+						"200": {
+							"description": "OK",
+							"content": {
+								"application/json": {
+								}
+							}
+						}
+					}
+				}
+			},
+			"api/user?userId": {
+				'GET': {
+					func: this.getUserById,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
+					"tags": [
+						"user-controller"
+					],
+					ensureExists: [
+						"user"
+					],
 					"summary": "getUserById",
+					"parameters": [
+						{
+							"name": "X-Authorization",
+							"in": "header",
+							"description": "bearer token",
+							"required": true,
+							"type": "string"
+						}, {
+							"name": "userId",
+							"in": "query",
+							"description": "userId",
+							"required": true,
+							"type": "string"
+						}
+					],
+					"responses": {
+						"200": {
+							"description": "OK",
+							"content": {
+								"application/json": {
+								}
+							}
+						}
+					}
+				},
+				'DELETE': {
+					func: this.deleteUserById,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
+					"tags": [
+						"user-controller"
+					],
+					ensureExists: [
+						"user"
+					],
+					ensureDoesntHave: [
+						"organization"
+					],
+					notLastAuthority: [
+						{ system: ["SYS_ADMIN"] },
+						{ organization: ["ORG_ADMIN"] },
+					],
+					"summary": "deleteUserById",
 					"parameters": [
 						{
 							"name": "X-Authorization",
@@ -663,6 +997,9 @@ class users extends csystem {
 			"api/user/me": {
 				'GET': {
 					func: this.getLoggedInUser,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
 					"tags": [
 						"user-controller"
 					],
@@ -687,9 +1024,84 @@ class users extends csystem {
 					}
 				},
 			},
+			"api/user/organizations?userId": {
+				'GET': {
+					func: this.listUserOrganizations,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
+					"tags": [
+						"organizations-controller"
+					],
+					"summary": "listUserOrganizations",
+					"parameters": [
+						{
+							"name": "X-Authorization",
+							"in": "header",
+							"description": "bearer token",
+							"required": true,
+							"type": "string"
+						}, {
+							"name": "userId",
+							"in": "query",
+							"description": "userId",
+							"required": true,
+							"type": "string"
+						},
+					],
+					"responses": {
+						"200": {
+							"description": "OK",
+							"content": {
+								"application/json": {
+								}
+							}
+						}
+					}
+				},
+			},
+			"api/user/facilities?userId": {
+				'GET': {
+					func: this.listUserFacilities,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
+					"tags": [
+						"facilities-controller"
+					],
+					"summary": "listUserFacilities",
+					"parameters": [
+						{
+							"name": "X-Authorization",
+							"in": "header",
+							"description": "bearer token",
+							"required": true,
+							"type": "string"
+						}, {
+							"name": "userId",
+							"in": "query",
+							"description": "userId",
+							"required": true,
+							"type": "string"
+						},
+					],
+					"responses": {
+						"200": {
+							"description": "OK",
+							"content": {
+								"application/json": {
+								}
+							}
+						}
+					}
+				},
+			},
 			"api/user": {
 				'PATCH': {
 					func: this.patchUser,
+					requiresLogin: true,
+					requiresAdmin: false,
+					doForAnother: false,
 					"tags": [
 						"user-controller"
 					],
@@ -701,16 +1113,16 @@ class users extends csystem {
 								"schema": {
 									"properties": {
 										"userId": {
-											"type": { type: "string" }
+											"type": "string"
 										},
 										"additionalInfo": { type: "string" },
-										"authority": { type: "string", enum: ["SYS_ADMIN|PHARMACY_ADMIN|SYS_USER"] }, // enum
+										"authority": { type: "string", enum: ["SYS_ADMIN", "SYS_USER"] }, // enum
 										"createdTime": 0,
 										"email": { type: "string" },
 										"firstName": { type: "string" },
 										"lastName": { type: "string" },
 										"isActive": { type: "boolean" },
-										"gender": { type: "string", enum: ["Male|Female"] },
+										"gender": { type: "string", enum: ["Male", "Female"] },
 										"dateOfBirth": { type: "string" },
 									}
 								}
@@ -761,17 +1173,22 @@ class users extends csystem {
 
 	async main(req, res, next) {
 		return new Promise(async (resolve, reject) => {
-			console.log('2222222222222222222222222222222222222')
-			console.log('2222222222222222222222222222222222222')
-			console.log('2222222222222222222222222222222222222')
-			console.log('2222222222222222222222222222222222222')
-			console.log('2222222222222222222222222222222222222')
-			// let func = this.pathExists(req)
-			let {func, requiresAdmin, doForAnother} =  this.pathExists(req)
-			if (!func) {
-				return reject({ code: 404, message: "Path not allowed" })
+
+			// let { func, requiresAdmin, doForAnother } = this.pathExists(req)
+			// if (!func) {
+			// 	return reject({ code: 404, message: "Path not allowed" })
+			// }
+			// let [err, care] = await to(func(req, res, next));
+			// if (err) {
+			// 	return reject(err)
+			// }
+			// res.send(care)
+			let [err, care] = await to(helpers.processRequirements(req, res, next));
+			if (err) {
+				return reject(err)
 			}
-			let [err, care] = await to(func(req, res, next));
+			let func = care.func;
+			;[err, care] = await to(func(req, res, next));
 			if (err) {
 				return reject(err)
 			}

@@ -6,50 +6,49 @@ const to = require('await-to-js').to
 const csystem = require(__dirname + "/../../csystem").csystem;
 const etc = require('node-etc')
 const path = require('path');
-// const bcrypt = require('bcrypt');
-// const saltRounds = 10;
-// const {sequelize} = require(__dirname+"/../../csystem").models
-// const Familyfe = require(__dirname+'/../../../modules/node-familyfe')(sequelize)
-// let sequelize, Familyfe;
-
 const helpers_ = require('../helpers').helpers
 let helpers;
+let sequelize, Familyfe;
 
 
-class users extends csystem {
+class authority extends csystem {
 
 	constructor(config) {
 		super(config);
 		helpers = new helpers_(this)
 	}
 
-	listAllUsers = async (req, res, next) => {
-		let filters = {};
-		try {
-			filters = JSON.parse(req.query.filters)
-		} catch (error) {}
-		let where = filters;
+	isSysAdmin = async (user) => {
 		return new Promise(async (resolve, reject) => {
-			let [err, care] = await to(this.sequelize.models.users.findAll({where}))
+			resolve(user.authority === 'SYS_ADMIN' ? true : false)
+		});
+	}
+
+	listOrganizations = async (req, res, next) => {
+		return new Promise(async (resolve, reject) => {
+			let [err, care] = await to(this.sequelize.models.organizations.findAll({ attributes: ['organizationId', 'organizationName'] }))
 			if (err) return reject(err)
 			let ret = [];
 			care.map(item => ret.push(item.dataValues))
 			resolve(ret);
 		})
 	}
+	
+
+
 
 	functionsMap = () => {
 		return {
-			"api/users?filters": {
+			"api/organizations": {
 				'GET': {
-					func: this.listAllUsers,
+					func: this.listOrganizations,
 					requiresLogin: true,
 					requiresAdmin: true,
 					doForAnother: false,
 					"tags": [
-						"users-controller"
+						"organizations-controller"
 					],
-					"summary": "listAllUsers",
+					"summary": "listOrganizations",
 					"parameters": [
 						{
 							"name": "X-Authorization",
@@ -57,16 +56,8 @@ class users extends csystem {
 							"description": "bearer token",
 							"required": true,
 							"type": "string"
-						},
-						{
-							"name": "filters",
-							"in": "query",
-							"description": "filters",
-							"required": false,
-							"type": "string"
 						}
-					]
-					,
+					],
 					"responses": {
 						"200": {
 							"description": "OK",
@@ -77,18 +68,15 @@ class users extends csystem {
 						}
 					}
 				}
-			}
+			},
 		}
 	}
 
 	tagsMap = () => {
 		return [
 			{
-				"name": "user-controller",
-				"description": "User Controller"
-			}, {
-				"name": "users-controller",
-				"description": "Users Controller"
+				"name": "organizations-controller",
+				"description": "Organizations Controller"
 			}
 		]
 	}
@@ -107,8 +95,6 @@ class users extends csystem {
 			res.send(care)
 		})
 	}
-
-
 }
 
-module.exports = users
+module.exports = authority

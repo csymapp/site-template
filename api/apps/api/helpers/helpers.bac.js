@@ -8,6 +8,8 @@ const etc = require('node-etc')
 const path = require('path');
 const { Op } = require("sequelize");
 const any = require('promise.any');
+const authority = require('../facility/facility');
+
 
 class helpers extends csystem {
 
@@ -25,7 +27,7 @@ class helpers extends csystem {
 	requireOrganization = async (authorities) => {
 		return new Promise(async (resolve, reject) => {
 			let { userId } = this.authenticatedUser
-			let { organizationId, facilityId, organizationUserId, facilityUserId } = this.params
+			let { organizationId, facilityId, organizationUserId } = this.params
 
 
 			const checkAuthority = async (authority) => {
@@ -37,11 +39,6 @@ class helpers extends csystem {
 
 					let organizationUserWhere = { authority, userUserId: userId }
 					if (organizationUserId) organizationUserWhere.organizationUserId = organizationUserId
-					let facilityUserWhere = {}
-					if (facilityUserId) {
-						facilityUserWhere.facilityUserId = facilityUserId
-					}
-					// console.log({facilityUserId, facilityUserWhere})
 					let associated = {
 						include: [
 							{
@@ -55,24 +52,12 @@ class helpers extends csystem {
 								model: this.sequelize.models.facilities,
 								required: true,
 								subQuery: false,
-								where: facilityWhere,
-								include: [
-									{
-										model: this.sequelize.models.facilityUser,
-										required: true,
-										// subQuery: false,
-										where: facilityUserWhere
-									}
-								]
+								where: facilityWhere
 							},
 						]
 					};
-					// console.log({associated, organizationWhere, facilityUserWhere, facilityWhere, organizationUserWhere})
 
 					let [err, care] = await to(this.sequelize.models.organizations.findOne(Object.assign({ where: organizationWhere }, associated)))
-					// console.log(care)
-					// return reject({ status: '401', message: `You are not permitted to perform ${authority} operation on ${organizationId || facilityId || organizationUserId}` })
-
 					// let [err, care] = await to(this.sequelize.models.organizations.findOne({ where: { userUserId: userId, organizationOrganizationId: organizationId, authority } }))
 					//  return reject({ status: '401', message: `You are not permitted to perform ${authority} operation on ${organizationId}` })
 					if (!care) {
@@ -80,27 +65,10 @@ class helpers extends csystem {
 						if (organizationUserId) {
 							[err, care] = await to(this.sequelize.models.organizationUser.findOne({ where: { organizationUserId } }));
 						}
-						else if (facilityId) {
-							[err, care] = await to(this.sequelize.models.facilities.findOne({ where: { facilityId } }));
-						} else {
-							if (facilityUserId) {
-								associated = {
-									include: [
-										{
-											model: this.sequelize.models.facilityUser,
-											required: true,
-											// subQuery: false,
-											where: facilityUserWhere
-										}
-									]
-								};
-								[err, care] = await to(this.sequelize.models.facilities.findOne(Object.assign({ where: { facilityId } }, associated)));
-							}
-						}
+						else if (facilityId) [err, care] = await to(this.sequelize.models.facilities.findOne({ where: { facilityId } }));
 						if (care) {
 							if (care.dataValues.organizationId) organizationId = care.dataValues.organizationId
 							if (care.dataValues.organizationOrganizationId) organizationId = care.dataValues.organizationOrganizationId
-							if (care.dataValues.facilityUsers[0].organizationOrganizationId) organizationId = care.dataValues.organizationOrganizationId
 						}
 						if (organizationId) {
 							;[err, care] = await to(this.sequelize.models.organizations.findOne({ where: { userUserId: userId, organizationId } }));
@@ -108,7 +76,7 @@ class helpers extends csystem {
 								return reject({ status: '401', message: `You are not permitted to perform ${authority} operation on ${organizationId || facilityId || organizationUserId}` })
 							else resolve(care)
 						}
-						return reject({ status: '401', message: `You are not permitted to perform ${authority} operation on ${organizationId || facilityId || organizationUserId || facilityUserId}` })
+						return reject({ status: '401', message: `You are not permitted to perform ${authority} operation on ${organizationId || facilityId || organizationUserId}` })
 					}
 					return resolve(care)
 				});
@@ -221,8 +189,6 @@ class helpers extends csystem {
 			let filter
 			let model
 			let value
-			let email = this.params.email
-			email = (email || '').toLowerCase();
 			switch (field) {
 				case "organization":
 					model = this.sequelize.models.organizations
@@ -242,7 +208,7 @@ class helpers extends csystem {
 				case "userEmail":
 					model = this.sequelize.models.users
 					value = this.params.email
-					filter = { where: { email: email } }
+					filter = { where: { email: this.params.email } }
 					break;
 				case "drugCategory":
 					model = this.sequelize.models.drugCategories
@@ -560,8 +526,7 @@ class helpers extends csystem {
 				;[err, care] = await to(this.ensureExists(ensureExists))
 				if (err) return reject(err);
 			}
-			// if (requiresChildren) {
-				if (requiresChildren && !isSysAdmin) {
+			if (requiresChildren && !isSysAdmin) {
 				;[err, care] = await to(this.requireChildren(requiresChildren))
 				if (err) return reject(err);
 			}

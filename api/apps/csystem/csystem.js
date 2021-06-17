@@ -15,53 +15,31 @@ const to = require('await-to-js').to,
 class Csystem {
 	sequelize = null;
 	constructor(config) {
-		// console.log(config);
-		// console.log('1111111111111111111')
-		// console.log(require(__dirname+'/models')(config))
-		// console.log(__dirname+'/models')
-
 		try {
-			// console.log('trying.....')
-			// console.log(this.sequelize)
 			sequelize = require(__dirname + '/models')(config)
-			console.log('POST MODELS')
-			console.log('POST MODELS')
-			console.log('POST MODELS')
-			console.log('POST MODELS')
-			// console.log(sequelize)
 			this.sequelize = sequelize;
-			// console.log(sequelize.models);process.exit();
-			console.log('CONSTRUCREO....	')
-			// console.log(config)
 			let force = false //|| config.database.force || false;
-			this.sequelize.sequelize.sync({ force: force }).then(response => console.log('resp')).catch(error => console.log(error))
+			this.sequelize.sequelize.sync({ force: force }).then(response => {}).catch(error => console.log(error))
 		} catch (error) {
-			// console.log('-------->')
-			// console.log('-------->')
-			// console.log('-------->')
 			// console.log(error)
 		}
 		this.config = config;
 
-		// console.log(config);process.exit();
-		// console.log('CCCCCCCCCCCCCCCCCCCCCCCCCCCCC')
-		// console.log('CCCCCCCCCCCCCCCCCCCCCCCCCCCCC')
-		// console.log('CCCCCCCCCCCCCCCCCCCCCCCCCCCCC')
-		// console.log('CCCCCCCCCCCCCCCCCCCCCCCCCCCCC')
-		// console.log(config)
-		// console.log(config.mailer)
 		try {
 			let transporterOptions = {
 				host: config.mailer.host,
 				port: parseInt(config.mailer.port) || 587,
-				secure: (config.mailer.secure === 'true' || config.mailer.secure === true) ? true : false,
-				auth: config.mailer.auth
+				// secure: (config.mailer.secure === 'true' || config.mailer.secure === true) ? true : false,
+				secureConnection: false,
+				auth: config.mailer.auth,
+				tls: {
+					ciphers:'SSLv3'
+				}
 			}
 			this.transporterOptions = transporterOptions
 			this.transporter = nodemailer.createTransport(transporterOptions);
 		} catch (error) { }
 		// ;[err, dontcare] = await to(sequelize.sync({force:force}))
-		// console.log(config)
 	}
 
 	async hashPassword(plainTextPassword) {
@@ -85,7 +63,7 @@ class Csystem {
 		});
 	}
 
-	token(user) {
+	createToken(user) {
 		return passport.generateToken(user, this.config.extras.tokenSecret);
 	}
 	/**
@@ -111,7 +89,6 @@ class Csystem {
 	async dbSync(force = false) {
 		let [err, dontcare] = []
 			;[err, dontcare] = await to(sequelize.sync({ force: force }))
-		console.log('resulted...........')
 		if (err) {
 			console.log(err)
 			return Promise.reject(new Error(err.name));
@@ -140,21 +117,63 @@ class Csystem {
 		let method = req.method
 		let pathStr = this.pathStr(req)
 		let funcMap;
-		try{
-			funcMap= this.functionsMap()
-		}catch(error){
-			funcMap = this.main.functionsMap() 
+		try {
+			funcMap = this.functionsMap()
+		} catch (error) {
+			funcMap = this.main.functionsMap()
 		}
-		let func = false, requiresAdmin= false, doForAnother= false, requiresLogin= false, swaggerObject;
+		let ensureDoesntHave = false, notLastAuthority= false, ensureExists = false, func = false, requiresAdmin = false, doForAnother = false, requiresLogin = false, requiresChildren = false, doForSelf = false, swaggerObject;
+
 		try {
 			func = funcMap[pathStr][method].func
 			requiresAdmin = funcMap[pathStr][method].requiresAdmin
 			doForAnother = funcMap[pathStr][method].doForAnother
 			requiresLogin = funcMap[pathStr][method].requiresLogin
+			requiresChildren = funcMap[pathStr][method].requiresChildren
+			ensureExists = funcMap[pathStr][method].ensureExists
+			doForSelf = funcMap[pathStr][method].doForSelf
+			ensureDoesntHave = funcMap[pathStr][method].ensureDoesntHave
+			notLastAuthority = funcMap[pathStr][method].notLastAuthority
 			swaggerObject = funcMap[pathStr][method]
 		} catch (error) {
+			try {
+				let pathParams = [pathStr.split("?")[0]].concat([(pathStr.split("?")[1]||'').split('&')]);
+				// pathParams  = pathParams.concat(pathStr.split("?")[1].split('&'));
+				for (let funcPath in funcMap) {
+					try {
+						/** different order in query vars from order in funcMap */
+						if (funcMap[funcPath][method]) {
+							let funcPathParams = [funcPath.split("?")[0]].concat([(funcPath.split("?")[1]||'').split('&')]);
+							try{
+								funcPathParams = [funcPath.split("?")[0]].concat([(funcPath.split("?")[1]).split('&')]);
+							}catch(error){}
+							// let funcPathParams = [funcPath.split("?")[0]].concat([(funcPath.split("?")[1]).split('&')]);
+							// let funcPathParams_ = [funcPath.split("?")[0]].concat([(funcPath.split("?")[1]||'').split('&')]);
+							if (funcPathParams[0] === pathParams[0]) {
+								pathParams[1] = pathParams[1].filter(item=>item!=='')
+								let isRequiredPath = pathParams[1].every(item => funcPathParams[1].includes(item));
+								if (isRequiredPath) {
+									func = funcMap[funcPath][method].func
+									requiresAdmin = funcMap[funcPath][method].requiresAdmin
+									doForAnother = funcMap[funcPath][method].doForAnother
+									requiresLogin = funcMap[funcPath][method].requiresLogin
+									requiresChildren = funcMap[funcPath][method].requiresChildren
+									ensureExists = funcMap[funcPath][method].ensureExists
+									doForSelf = funcMap[funcPath][method].doForSelf
+									ensureDoesntHave = funcMap[funcPath][method].ensureDoesntHave
+									notLastAuthority = funcMap[funcPath][method].notLastAuthority
+									swaggerObject = funcMap[funcPath][method]
+								}
+								// console.log({func})
+							}
+						}
+					} catch (error) { }
+				}
+			} catch (error) { }
+
+			// console.log(error)
 		}
-		return {func, requiresAdmin, doForAnother, requiresLogin, swaggerObject}
+		return { func, requiresAdmin, doForAnother, requiresLogin, swaggerObject, requiresChildren, ensureExists, doForSelf, ensureDoesntHave, notLastAuthority}
 	}
 
 	pathStr(req) {
@@ -193,11 +212,11 @@ class Csystem {
 		return ret
 	}
 
-	parseBool(bool){
-		if(typeof bool === 'boolean')return bool;
-		if(typeof bool ==='number')return !!bool
-		if(typeof bool ==='string')bool = bool.toLocaleLowerCase();
-		switch(bool){
+	parseBool(bool) {
+		if (typeof bool === 'boolean') return bool;
+		if (typeof bool === 'number') return !!bool
+		if (typeof bool === 'string') bool = bool.toLocaleLowerCase();
+		switch (bool) {
 			case "true":
 				return true;
 			case "false":
@@ -207,23 +226,34 @@ class Csystem {
 	}
 
 	async isAuthenticated(req, res, next) {
-		if(req.headers["X-Authorization"])req.headers.Authorization = req.headers["X-Authorization"]
-		if(req.headers["x-authorization"])req.headers.authorization = req.headers["x-authorization"]
+		if (req.headers["X-Authorization"]) req.headers.Authorization = req.headers["X-Authorization"]
+		if (req.headers["x-authorization"]) req.headers.authorization = req.headers["x-authorization"]
 		let opts = {
 			jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
 			secretOrKey: this.config.extras.tokenSecret
 		}
 		// console.log(opts)
 		passport.use(new JwtStrategy(
-			
+
 			opts,
 			async (jwt_payload, next) => {
 				next(null, jwt_payload)
 			}))
-		return new Promise((resolve, reject) => {
-			passport.authenticate('jwt', { session: false }, (err, user, info) => {
+		return new Promise(async (resolve, reject) => {
+			let token = (req.headers.Authorization || req.headers.authorization || req.headers["X-Authorization"] || req.headers["x-authorization"] || '').split(" ").slice(-1)[0]
+			let [err, care] = await to(this.sequelize.models.logins.findOne({ where: { token } }))
+			// console.log(care)
+			if(!care){
+				// console.log({token})
+				return reject({status:422, message:`Invalid token.`})
+			}
+			passport.authenticate('jwt', { session: false }, async (err, user, info) => {
 				if (err) return reject(err)
 				if (info) return reject({ message: info.message, status: 422 })
+				let care;
+				;[err, care] = await to(this.sequelize.models.users.findOne({where: {userId:user.userId}}))
+				if(err)return reject(err)
+				if(!care)return reject({status:422, message:`${user.userId} not found.`})
 				return resolve(user)
 			})(req, res, next)
 		})
@@ -246,33 +276,6 @@ class Csystem {
 			resolve(ret)
 		})
 	}
-
-	// async _try(func, wait = true)
-	// {
-	// 	let [err, dontcare, care] = [];
-
-	// 	if(wait === false)
-	// 		[err, care] = func
-	// 	else
-	// 		[err, care] = await to(func)
-	// 	console.log(err)
-	// 	console.log(err)
-	// 	console.log(err)
-	// 	console.log(err)
-	// 	if(err) throw ("err")
-	// 	console.log(err)
-	// 	// try {
-	// 	// 	if(wait === false)
-	// 	// 		[err, care] = func
-	// 	// 	else
-	// 	// 		[err, care] = await to(func)
-
-	// 	// }catch(err) {
-	// 	// 	console.log("thre some error...")
-	// 	// 	console.log(err)
-	// 	// }
-	// }
-
 }
 
 module.exports = Csystem

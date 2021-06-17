@@ -12,13 +12,8 @@ class csycmsApi {
         return path.join(__dirname, "swagger");
     }
     swaggerData(){
-        console.log('=====================')
-        console.log('=====================')
-        console.log('=====================')
-        console.log('=====================')
-        console.log('=====================')
-        console.log(conf.projectRoot())
-        console.log(conf.packageJson())
+        // console.log(conf.projectRoot())
+        // console.log(conf.packageJson())
     }
 }
 

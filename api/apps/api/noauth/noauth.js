@@ -9,13 +9,17 @@ const path = require('path');
 // const bcrypt = require('bcrypt');
 // const saltRounds = 10;
 
-let sequelize;
+// let sequelize;
+const helpers_ = require('../helpers').helpers
+let helpers;
+
 
 
 class noauth extends csystem {
 
 	constructor(config) {
 		super(config);
+		helpers = new helpers_(this)
 	}
 
 	/** Set path for it */
@@ -41,7 +45,7 @@ class noauth extends csystem {
 			await to(this.sequelize.models.users.update({ isActive: true }, { where: { userId } }))
 			await to(care.activationCode.destroy())
 				;[err, care] = await to(this.createPasswordCode(userId))
-			resolve({passwordToken:care.code})
+			resolve({ passwordToken: care.code })
 
 		})
 	}
@@ -110,9 +114,30 @@ class noauth extends csystem {
 		})
 	}
 
+	getActivationCode = async (req, res, next) => {
+		return new Promise(async (resolve, reject) => {
+			let userId = req.query;
+			let associated = {
+				include:
+					[
+						{
+							model: this.sequelize.models.activationCode,
+						},
+					]
+			}
+			let [err, care] = await to(this.sequelize.models.users.findOne(Object.assign({ where: userId }, associated)));
+			if(!care.activationCode){
+				return reject({ code: 409, message: "Account had been activated" })
+			}
+			let activationCode = care.activationCode.code;
+			resolve({activationCode})
+		})
+	}
+
 	getPasswordResetCode = async (req, res, next) => {
 		return new Promise(async (resolve, reject) => {
 			let { sendActivationMail, email } = req.query;
+			email = email.toLowerCase()
 			let [err, care] = await to(this.sequelize.models.users.findOne(
 				{ where: { email } }
 			));
@@ -259,12 +284,6 @@ class noauth extends csystem {
 	// 					})
 	// 				}
 	// 			}
-	// 			console.log('PPPPPPPPPPPPPPPPPPPPPPPPPbbbbbbbbbbbb')
-	// 			console.log('PPPPPPPPPPPPPPPPPPPPPPPPPbbbbbbbbbbbb')
-	// 			console.log('PPPPPPPPPPPPPPPPPPPPPPPPPbbbbbbbbbbbb')
-	// 			console.log('PPPPPPPPPPPPPPPPPPPPPPPPP')
-	// 			console.log('PPPPPPPPPPPPPPPPPPPPPPPPP')
-	// 			console.log('PPPPPPPPPPPPPPPPPPPPPPPPP')
 	// 			// console.log(tmpErr.match(/([0-9a-zA-Z]+).([0-9a-zA-Z]+) cannot be null/g))
 	// 			// tmpErr = tmpErr.replace(/([0-9a-zA-Z]+).([0-9a-zA-Z]+) cannot be null/g,(match, p1, p2, offset, string) => {
 	// 			// 	// let ret = `Data truncated for ${p1}`
@@ -330,7 +349,7 @@ class noauth extends csystem {
 	// 	})
 	// }
 
-	
+
 	// createPasswordCode = async (userId) => {
 	// 	return new Promise(async (resolve, reject) => {
 	// 		let associated = {
@@ -351,8 +370,8 @@ class noauth extends csystem {
 	// 	})
 	// }
 
-	
-	
+
+
 
 
 	functionsMap = () => {
@@ -381,6 +400,40 @@ class noauth extends csystem {
 					}
 				}
 			},
+			"api/noauth/activationCode?userId": {
+				'GET': {
+					func: this.getActivationCode,
+					requiresLogin: true,
+					requiresAdmin: true,
+					doForAnother: false,
+					"tags": [
+						"auth-controller"
+					],
+					"summary": "getActivationCode",
+					"parameters": [
+						{
+							"name": "X-Authorization",
+							"in": "header",
+							"description": "bearer token",
+							"required": true,
+							"type": "string"
+						},
+						{
+							"name": "userId",
+							"in": "query",
+							"description": "userId",
+							"required": true,
+							"type": "string"
+						}
+					]
+					,
+					"responses": {
+						"200": {
+							"description": "OK"
+						}
+					}
+				}
+			},
 			"api/noauth/resetPassword": {
 				'POST': {
 					func: this.createPassword,
@@ -394,8 +447,8 @@ class noauth extends csystem {
 							"application/json": {
 								"schema": {
 									"properties": {
-										"passwordToken": { "type": "string" },
-										"password": { type: "string" },
+										"passwordToken": { "type": "string", required: true },
+										"password": { type: "string", required: true },
 									}
 								}
 							}
@@ -455,11 +508,21 @@ class noauth extends csystem {
 
 	async main(req, res, next) {
 		return new Promise(async (resolve, reject) => {
-			let func = this.pathExists(req)
-			if (!func) {
-				return reject({ code: 404, message: "Path not allowed"})
+			// let func = this.pathExists(req)
+			// if (!func) {
+			// 	return reject({ code: 404, message: "Path not allowed"})
+			// }
+			// let [err, care] = await to(func(req, res, next));
+			// if (err) {
+			// 	return reject(err)
+			// }
+			// res.send(care)
+			let [err, care] = await to(helpers.processRequirements(req, res, next));
+			if (err) {
+				return reject(err)
 			}
-			let [err, care] = await to(func(req, res, next));
+			let func = care.func;
+			;[err, care] = await to(func(req, res, next));
 			if (err) {
 				return reject(err)
 			}

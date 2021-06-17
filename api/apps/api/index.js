@@ -13,7 +13,6 @@ class Api extends csystem
 
 	async main(req, res)
 	{
-		console.log('calling main...')
 		let self = this
 		let endpoints = await self.getRoutes(__dirname)
 		res.json(endpoints)
