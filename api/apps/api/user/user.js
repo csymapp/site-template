@@ -526,6 +526,15 @@ class users extends csystem {
 				delete item.organizationUsers
 				ret.push(item)
 			});
+
+			let filteredRet = {};
+			ret.map(item => {
+				filteredRet[item.organizationId] = item
+			})
+			ret = [];
+			for (let i in filteredRet) {
+				ret.push(filteredRet[i])
+			}
 			resolve(ret);
 		})
 	}
