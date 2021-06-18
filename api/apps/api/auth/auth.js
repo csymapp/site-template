@@ -53,7 +53,10 @@ class auth extends csystem {
 				return reject({ status: 401, message: "Wrong email or password" })
 			}
 			if (!care.dataValues.enabled) {
-				return reject({ status: 401, message: `Account belonging to ${email} has been diabled` })
+				return reject({ status: 401, message: `Account belonging to ${email} is disabled` })
+			}
+			if (!care.dataValues.enabled) {
+				return reject({ status: 401, message: `Account belonging to ${email} has not been activated` })
 			}
 			let user = care.dataValues
 			let hash = care.password.dataValues.password
@@ -119,6 +122,7 @@ class auth extends csystem {
 	refreshToken_ = async (req, res, next) => {
 		return new Promise(async (resolve, reject) => {
 			let { userId, authority, firstName, lastName, email } = req.authenticatedUser;
+			email = email.toLowerCase();
 			let tmpUser = Object.assign({}, { userId, email, authority, firstName, lastName })
 			let currentToken = (req.headers.Authorization || req.headers.authorization || req.headers["X-Authorization"] || req.headers["x-authorization"] || '').split(" ").slice(-1)[0]
 			let [err, care] = await to(this.sequelize.models.logins.findOne({ where: { currentToken } }));
