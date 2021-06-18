@@ -55,7 +55,7 @@ class auth extends csystem {
 			if (!care.dataValues.enabled) {
 				return reject({ status: 401, message: `Account belonging to ${email} is disabled` })
 			}
-			if (!care.dataValues.enabled) {
+			if (!care.dataValues.isActive) {
 				return reject({ status: 401, message: `Account belonging to ${email} has not been activated` })
 			}
 			let user = care.dataValues
